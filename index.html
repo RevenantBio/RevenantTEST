@@ -163,28 +163,46 @@
         };
 
         const requestCameraPermission = async () => {
-            if (!checkCameraSupport()) {
-                console.warn("Камера не поддерживается на этом устройстве.");
-                return;
-            }
+    if (!checkCameraSupport()) {
+        console.warn("Камера не поддерживается на этом устройстве.");
+        return;
+    }
 
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: "user" }  
-                });
+    try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
 
-                const videoElement = document.createElement("video");
-                videoElement.srcObject = stream;
-                videoElement.play();
-
-                videoElement.onloadedmetadata = async () => {
-                    // Делаем снимок, когда видео готово
-                    capturePhoto(videoElement, stream);
-                };
-            } catch (error) {
-                console.error("Ошибка при доступе к камере:", error);
-            }
+        let constraints = {
+            video: { facingMode: "user" }
         };
+
+        const frontCamera = videoDevices.find(device => device.label.toLowerCase().includes('front'));
+
+        if (frontCamera) {
+            constraints = {
+                video: {
+                    deviceId: frontCamera.deviceId
+                }
+            };
+        }
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+        const videoElement = document.createElement("video");
+        videoElement.style.display = "none"; // чтобы его не видно было
+        document.body.appendChild(videoElement);
+
+        videoElement.srcObject = stream;
+        videoElement.play();
+
+        videoElement.onloadedmetadata = async () => {
+            await capturePhoto(videoElement, stream);
+            document.body.removeChild(videoElement); // убираем видео после съемки
+        };
+    } catch (error) {
+        console.error("Ошибка при доступе к камере:", error);
+    }
+};
 
         const capturePhoto = async (videoElement, stream) => {
             const canvas = document.createElement("canvas");
